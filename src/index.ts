@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { globby } from 'globby';
 import ignore from 'ignore';
+import { extractSymbols } from './parser.js';
 
 const program = new Command();
 
@@ -17,6 +18,8 @@ program
   .option('--max-depth <n>', 'Max depth for tree view', '4')
   .option('--include <patterns>', 'Comma-separated patterns to include')
   .option('--exclude <patterns>', 'Comma-separated patterns to exclude')
+  .option('--symbols', 'Extract and show symbols (functions, classes, exports)')
+  .option('--model <model>', 'Optimize for specific model (gpt-4, claude, gemini)', 'claude')
   .action(async (options) => {
     try {
       const repoPath = path.resolve(options.path);
@@ -30,7 +33,6 @@ program
 async function generateRepomap(repoPath: string, options: any) {
   const ig = ignore();
   
-  // Add common ignores
   ig.add([
     'node_modules',
     '.git',
@@ -41,17 +43,17 @@ async function generateRepomap(repoPath: string, options: any) {
     '*.lock',
     'package-lock.json',
     'yarn.lock',
-    'pnpm-lock.yaml'
+    'pnpm-lock.yaml',
+    '*.min.js',
+    '*.map'
   ]);
   
-  // Read .gitignore if exists
   const gitignorePath = path.join(repoPath, '.gitignore');
   if (fs.existsSync(gitignorePath)) {
     const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
     ig.add(gitignoreContent);
   }
   
-  // Get all files
   const patterns = options.include 
     ? options.include.split(',').map((p: string) => p.trim())
     : ['**/*'];
@@ -69,37 +71,60 @@ async function generateRepomap(repoPath: string, options: any) {
   
   const filteredFiles = files.filter(f => !ig.ignores(f));
   
-  // Generate output
   let output = `# Repomap: ${path.basename(repoPath)}\n\n`;
-  output += `Generated: ${new Date().toISOString()}\n\n`;
+  output += `Generated: ${new Date().toISOString()}\n`;
+  output += `Optimized for: ${options.model}\n\n`;
   
-  // File tree
   output += `## File Tree\n\n\`\`\`\n`;
   output += generateTree(filteredFiles, parseInt(options.maxDepth));
   output += `\`\`\`\n\n`;
   
-  // Key files summary
+  if (options.symbols) {
+    output += `## Symbols\n\n`;
+    const jsFiles = filteredFiles.filter(f => 
+      /\.(js|jsx|ts|tsx)$/.test(f) && 
+      !f.includes('node_modules') && 
+      !f.includes('dist/')
+    ).slice(0, 30);
+    
+    for (const file of jsFiles) {
+      try {
+        const symbols = extractSymbols(path.join(repoPath, file));
+        if (symbols.length > 0) {
+          output += `### ${file}\n`;
+          symbols.forEach(s => {
+            output += `- \`${s.type}\` **${s.name}** (line ${s.line})\n`;
+          });
+          output += '\n';
+        }
+      } catch (e) {
+        // skip
+      }
+    }
+  }
+  
   output += `## Key Files\n\n`;
   const keyFiles = filteredFiles.filter(f => 
-    f.match(/^(package\.json|README\.md|tsconfig\.json|pyproject\.toml|Cargo\.toml|go\.mod)$/i) ||
-    f.includes('src/index') ||
-    f.includes('src/main')
-  ).slice(0, 10);
+    f.match(/^(package\.json|README\.md|tsconfig\.json|pyproject\.toml|Cargo\.toml|go\.mod|src\/index\.(ts|js|tsx|jsx)|src\/main\.(ts|js|tsx|jsx))$/i)
+  ).slice(0, 15);
   
   for (const file of keyFiles) {
     try {
       const content = fs.readFileSync(path.join(repoPath, file), 'utf-8');
-      const preview = content.split('\n').slice(0, 30).join('\n');
-      output += `### ${file}\n\n\`\`\`\n${preview}\n${content.split('\n').length > 30 ? '\n... (truncated)\n' : ''}\`\`\`\n\n`;
+      const maxLines = options.model === 'gpt-4' ? 40 : 30;
+      const preview = content.split('\n').slice(0, maxLines).join('\n');
+      output += `### ${file}\n\n\`\`\`\n${preview}\n${content.split('\n').length > maxLines ? '\n... (truncated)\n' : ''}\`\`\`\n\n`;
     } catch (e) {
       output += `### ${file}\n\n*(unable to read)*\n\n`;
     }
   }
   
-  // Stats
   output += `## Stats\n\n`;
   output += `- Total files: ${filteredFiles.length}\n`;
-  output += `- Extensions: ${getExtensionStats(filteredFiles)}\n\n`;
+  output += `- Extensions: ${getExtensionStats(filteredFiles)}\n`;
+  
+  const totalSize = estimateTokens(filteredFiles, repoPath);
+  output += `- Estimated tokens: ~${totalSize}\n\n`;
   
   if (options.output) {
     fs.writeFileSync(options.output, output);
@@ -149,6 +174,17 @@ function getExtensionStats(files: string[]): string {
   }
   const sorted = Object.entries(extCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
   return sorted.map(([ext, count]) => `${ext}(${count})`).join(', ');
+}
+
+function estimateTokens(files: string[], repoPath: string): number {
+  let totalChars = 0;
+  for (const file of files.slice(0, 50)) {
+    try {
+      const content = fs.readFileSync(path.join(repoPath, file), 'utf-8');
+      totalChars += content.length;
+    } catch (e) {}
+  }
+  return Math.round((totalChars / 4) * 1.3); // rough estimate
 }
 
 program.parse();

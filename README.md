@@ -71,3 +71,18 @@ npm start
 ## License
 
 MIT
+
+## New Features
+
+- **Symbol extraction** - Parse JavaScript/TypeScript files to extract functions, classes, interfaces, and exports using Babel parser
+- **Model optimization** - Tailor output for different LLMs (Claude, GPT-4, Gemini)
+- **Token estimation** - Get approximate token count for your repomap
+- **Tests included** - Comprehensive test suite with Vitest
+- **LLM-optimized format** - Clean markdown structure designed for maximum context efficiency
+
+## Roadmap
+
+- [ ] Tree-sitter integration for more languages (Python, Rust, Go)
+- [ ] Interactive mode
+- [ ] Custom templates
+- [ ] VS Code extension
