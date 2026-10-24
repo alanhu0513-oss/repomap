@@ -1,0 +1,41 @@
+{
+  "name": "repomap",
+  "version": "0.1.0",
+  "description": "A CLI tool to generate compact codebase maps optimized for LLMs",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "repomap": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon --watch src --exec ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cli",
+    "codebase",
+    "map",
+    "llm",
+    "context",
+    "repomap"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^6.0.1",
+    "commander": "^15.0.0",
+    "globby": "^16.2.4",
+    "ignore": "^7.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
